@@ -1,68 +1,109 @@
-import streamlit as st
+from flask import Flask, escape, request, render_template
 import pickle
 import numpy as np
 
-# import the model
-pipe = pickle.load(open('pipe.pkl', 'rb'))
-df = pickle.load(open('df.pkl', 'rb'))
+app = Flask(__name__)
+model = pickle.load(open('model.pkl', 'rb'))
 
-st.title("Laptop Predictor")
+@app.route('/')
+def home():
+    return render_template("index.html")
 
-# brand
-company = st.selectbox('Brand', df['Company'].unique())
 
-# type of laptop
-type = st.selectbox('Type', df['TypeName'].unique())
+@app.route('/predict', methods=['GET', 'POST'])
+def predict():
+    if request.method ==  'POST':
+        gender = request.form['gender']
+        married = request.form['married']
+        dependents = request.form['dependents']
+        education = request.form['education']
+        employed = request.form['employed']
+        credit = float(request.form['credit'])
+        area = request.form['area']
+        ApplicantIncome = float(request.form['ApplicantIncome'])
+        CoapplicantIncome = float(request.form['CoapplicantIncome'])
+        LoanAmount = float(request.form['LoanAmount'])
+        Loan_Amount_Term = float(request.form['Loan_Amount_Term'])
 
-# Ram
-ram = st.selectbox('RAM(in GB)', [2, 4, 6, 8, 12, 16, 24, 32, 64])
+        # gender
+        if (gender == "Male"):
+            male=1
+        else:
+            male=0
+        
+        # married
+        if(married=="Yes"):
+            married_yes = 1
+        else:
+            married_yes=0
 
-# weight
-weight = st.number_input('Weight of the Laptop')
+        # dependents
+        if(dependents=='1'):
+            dependents_1 = 1
+            dependents_2 = 0
+            dependents_3 = 0
+        elif(dependents == '2'):
+            dependents_1 = 0
+            dependents_2 = 1
+            dependents_3 = 0
+        elif(dependents=="3+"):
+            dependents_1 = 0
+            dependents_2 = 0
+            dependents_3 = 1
+        else:
+            dependents_1 = 0
+            dependents_2 = 0
+            dependents_3 = 0  
 
-# Touchscreen
-touchscreen = st.selectbox('Touchscreen', ['No', 'Yes'])
+        # education
+        if (education=="Not Graduate"):
+            not_graduate=1
+        else:
+            not_graduate=0
 
-# IPS
-ips = st.selectbox('IPS', ['No', 'Yes'])
+        # employed
+        if (employed == "Yes"):
+            employed_yes=1
+        else:
+            employed_yes=0
 
-# screen size
-screen_size = st.number_input('Screen Size')
+        # property area
 
-# resolution
-resolution = st.selectbox('Screen Resolution', [
-                          '1920x1080', '1366x768', '1600x900', '3840x2160', '3200x1800', '2880x1800', '2560x1600', '2560x1440', '2304x1440'])
+        if(area=="Semiurban"):
+            semiurban=1
+            urban=0
+        elif(area=="Urban"):
+            semiurban=0
+            urban=1
+        else:
+            semiurban=0
+            urban=0
 
-#cpu
-cpu = st.selectbox('CPU', df['Cpu brand'].unique())
 
-hdd = st.selectbox('HDD(in GB)', [0, 128, 256, 512, 1024, 2048])
+        ApplicantIncomelog = np.log(ApplicantIncome)
+        totalincomelog = np.log(ApplicantIncome+CoapplicantIncome)
+        LoanAmountlog = np.log(LoanAmount)
+        Loan_Amount_Termlog = np.log(Loan_Amount_Term)
 
-ssd = st.selectbox('SSD(in GB)', [0, 8, 128, 256, 512, 1024])
+        prediction = model.predict([[credit, ApplicantIncomelog,LoanAmountlog, Loan_Amount_Termlog, totalincomelog, male, married_yes, dependents_1, dependents_2, dependents_3, not_graduate, employed_yes,semiurban, urban ]])
 
-gpu = st.selectbox('GPU', df['Gpu brand'].unique())
+        # print(prediction)
 
-os = st.selectbox('OS', df['os'].unique())
+        if(prediction=="N"):
+            prediction="No"
+        else:
+            prediction="Yes"
 
-if st.button('Predict Price'):
-    # query
-    ppi = None
-    if touchscreen == 'Yes':
-        touchscreen = 1
+
+        return render_template("prediction.html", prediction_text="loan status is {}".format(prediction))
+
+
+
+
     else:
-        touchscreen = 0
+        return render_template("prediction.html")
 
-    if ips == 'Yes':
-        ips = 1
-    else:
-        ips = 0
 
-    X_res = int(resolution.split('x')[0])
-    Y_res = int(resolution.split('x')[1])
-    ppi = ((X_res**2) + (Y_res**2))**0.5/screen_size
-    query = np.array([company, type, ram, weight, touchscreen,
-                     ips, ppi, cpu, hdd, ssd, gpu, os])
 
-    query = query.reshape(1, 12)
-    st.title("The predicted price of this configuration is " +
-             str(int(np.exp(pipe.predict(query)[0]))))
+if __name__ == "__main__":
+    app.run(debug=True)
